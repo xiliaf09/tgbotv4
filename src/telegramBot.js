@@ -95,6 +95,8 @@ Collez simplement l'adresse d'un contrat pour voir toutes les informations et ac
 
 **Utilisation:**
 • Collez une adresse de contrat → Informations complètes
+• Boutons d'achat : 0.0001, 0.2, 0.4, 1 ETH
+• Bouton X ETH pour montant personnalisé
 • /balance - Voir vos soldes
 • /help - Aide détaillée
 
@@ -141,7 +143,7 @@ Collez simplement l'adresse d'un contrat pour voir toutes les informations et ac
 • Votre solde (si vous en possédez)
 
 **⚡ Achats rapides:**
-• 0.1 ETH, 0.2 ETH, 0.5 ETH
+• 0.0001 ETH, 0.2 ETH, 0.4 ETH, 1 ETH
 • Bouton X ETH pour montant personnalisé
 
 **💸 Ventes rapides:**
@@ -411,11 +413,14 @@ ${tokenInfo.safetyCheck.includes('Faible') ? '⚠️ **Ce token a une faible liq
     const keyboard = {
       inline_keyboard: [
         [
-          { text: '💰 Buy 0.1 ETH', callback_data: `buy_${tokenInfo.address}_0.1` },
+          { text: '💰 Buy 0.0001 ETH', callback_data: `buy_${tokenInfo.address}_0.0001` },
           { text: '💰 Buy 0.2 ETH', callback_data: `buy_${tokenInfo.address}_0.2` }
         ],
         [
-          { text: '💰 Buy 0.5 ETH', callback_data: `buy_${tokenInfo.address}_0.5` },
+          { text: '💰 Buy 0.4 ETH', callback_data: `buy_${tokenInfo.address}_0.4` },
+          { text: '💰 Buy 1 ETH', callback_data: `buy_${tokenInfo.address}_1` }
+        ],
+        [
           { text: '💰 Buy X ETH', callback_data: `buy_custom_${tokenInfo.address}` }
         ]
       ]
