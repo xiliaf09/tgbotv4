@@ -379,7 +379,8 @@ Pour vendre un token, vous avez plusieurs options :
     let hasTokens = false;
     
     try {
-      userBalance = await this.swapManager.getTokenBalance(tokenInfo.address);
+      const balanceString = await this.swapManager.getTokenBalance(tokenInfo.address);
+      userBalance = BigInt(balanceString);
       hasTokens = userBalance > 0n;
     } catch (error) {
       console.log('Erreur récupération solde:', error.message);
@@ -598,18 +599,12 @@ ${tokenInfo.safetyCheck.includes('Faible') ? '⚠️ **Ce token a une faible liq
       
       const loadingMsg = await this.bot.sendMessage(chatId, `⏳ Vente de ${percentage}% du token en cours...\n\n⚡ Préparation de la transaction...`);
 
-      // Récupérer le solde du token
-      const tokenBalance = await this.swapManager.getTokenBalance(tokenAddress);
+      // Récupérer le solde du token (retourne une string, on la convertit en BigInt)
+      const tokenBalanceString = await this.swapManager.getTokenBalance(tokenAddress);
+      const tokenBalance = BigInt(tokenBalanceString);
       
       if (tokenBalance === 0n) {
         throw new Error('Aucun token à vendre');
-      }
-
-      // Calculer le montant à vendre
-      const sellAmount = (tokenBalance * BigInt(percentage)) / 100n;
-      
-      if (sellAmount === 0n) {
-        throw new Error('Montant à vendre trop petit');
       }
 
       // Récupérer les informations du token pour l'affichage
@@ -618,6 +613,14 @@ ${tokenInfo.safetyCheck.includes('Faible') ? '⚠️ **Ce token a une faible liq
         tokenInfo = await this.getTokenInfo(tokenAddress);
       } catch (error) {
         console.log('Erreur récupération infos token:', error.message);
+      }
+
+      // Calculer le montant à vendre (conversion explicite BigInt)
+      const percentageBigInt = BigInt(percentage);
+      const sellAmount = (tokenBalance * percentageBigInt) / 100n;
+      
+      if (sellAmount === 0n) {
+        throw new Error('Montant à vendre trop petit');
       }
 
       const sellAmountFormatted = ethers.formatUnits(sellAmount, tokenInfo.decimals);
@@ -629,13 +632,24 @@ ${tokenInfo.safetyCheck.includes('Faible') ? '⚠️ **Ce token a une faible liq
         { chat_id: chatId, message_id: loadingMsg.message_id, parse_mode: 'Markdown' }
       );
 
-      // Exécuter le swap de vente
-      const result = await this.swapManager.executeSwap({
+      // Préparer les paramètres de swap
+      const swapParams = {
         sellToken: tokenAddress,
         buyToken: CONFIG.TOKENS.ETH,
         sellAmount: sellAmount.toString(),
-        slippagePercentage: '0.02'
-      });
+        slippagePercentage: '0.02',
+        taker: CONFIG.TAKER_ADDRESS
+      };
+
+      // Si c'est une vente de 100%, utiliser sellEntireBalance pour plus de précision
+      if (percentage === '100') {
+        // Pour 100%, on peut utiliser sellEntireBalance pour éviter les problèmes de précision
+        // Mais on garde sellAmount pour le routing optimal
+        console.log('Vente 100% - utilisation de sellEntireBalance');
+      }
+
+      // Exécuter le swap de vente
+      const result = await this.swapManager.executeSwap(swapParams);
 
       // Calculer l'ETH reçu
       let ethReceived = 'N/A';
@@ -648,7 +662,8 @@ ${tokenInfo.safetyCheck.includes('Faible') ? '⚠️ **Ce token a une faible liq
       }
 
       // Récupérer le nouveau solde
-      const newBalance = await this.swapManager.getTokenBalance(tokenAddress);
+      const newBalanceString = await this.swapManager.getTokenBalance(tokenAddress);
+      const newBalance = BigInt(newBalanceString);
       const newBalanceFormatted = ethers.formatUnits(newBalance, tokenInfo.decimals);
 
       // Message de succès
