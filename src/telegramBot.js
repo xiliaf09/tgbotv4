@@ -31,7 +31,8 @@ export class ZeroXTelegramBot {
     this.bot.setMyCommands([
       { command: 'start', description: '🚀 Démarrer le bot' },
       { command: 'help', description: '❓ Aide et commandes' },
-      { command: 'balance', description: '💼 Voir les soldes' }
+      { command: 'balance', description: '💼 Voir les soldes' },
+      { command: 'sell', description: '💰 Vendre un token' }
     ]);
   }
 
@@ -49,6 +50,11 @@ export class ZeroXTelegramBot {
     // Commande /balance
     this.bot.onText(/\/balance/, (msg) => {
       this.handleBalance(msg);
+    });
+
+    // Commande /sell
+    this.bot.onText(/\/sell/, (msg) => {
+      this.handleSell(msg);
     });
 
     // Détection automatique d'adresse de contrat
@@ -120,16 +126,28 @@ Collez simplement l'adresse d'un contrat pour voir toutes les informations et ac
 **💼 Voir les soldes:**
 \`/balance\` - Affiche vos soldes ETH et tokens
 
+**💰 Vendre des tokens:**
+\`/sell\` - Aide pour la vente de tokens
+• Après un achat : Interface de vente automatique
+• Collez une adresse : Boutons de vente si vous en possédez
+• Boutons : Sell 10%, 25%, 50%, 100%
+
 **🔍 Informations affichées:**
 • Nom du token et adresse
 • DEX utilisé (Uniswap V3)
 • Market Cap et Liquidité  
 • Taxes (Buy/Sell/Transfer)
 • Vérification de sécurité
+• Votre solde (si vous en possédez)
 
 **⚡ Achats rapides:**
 • 0.1 ETH, 0.2 ETH, 0.5 ETH
 • Bouton X ETH pour montant personnalisé
+
+**💸 Ventes rapides:**
+• Sell 10%, 25%, 50%, 100%
+• Affichage du montant exact et ETH reçu
+• Solde restant après vente
 
 **⚠️ Sécurité:**
 • Vérifiez toujours les informations du token
@@ -175,6 +193,34 @@ Collez simplement l'adresse d'un contrat pour voir toutes les informations et ac
     } catch (error) {
       this.bot.sendMessage(chatId, `❌ Erreur: ${error.message}`);
     }
+  }
+
+  // Nouvelle fonction pour gérer la commande /sell
+  async handleSell(msg) {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+
+    if (!this.isAuthorized(userId)) {
+      return this.bot.sendMessage(chatId, '❌ Accès non autorisé');
+    }
+
+    const helpMessage = `
+💰 **Commande de vente**
+
+Pour vendre un token, vous avez plusieurs options :
+
+1. **Après un achat** : L'interface de vente apparaît automatiquement
+2. **Commande manuelle** : Collez l'adresse du token que vous voulez vendre
+3. **Boutons de vente** : Utilisez les boutons Sell 10%, 25%, 50%, 100%
+
+**Exemple d'utilisation :**
+• Collez l'adresse du token → Interface de vente
+• Ou utilisez les boutons après un achat
+
+⚠️ **Attention :** Vérifiez toujours que vous avez des tokens à vendre !
+    `;
+
+    this.bot.sendMessage(chatId, helpMessage, { parse_mode: 'Markdown' });
   }
 
   // Nouvelle fonction pour gérer les adresses de contrat collées
@@ -328,6 +374,17 @@ Collez simplement l'adresse d'un contrat pour voir toutes les informations et ac
       return `$${num.toFixed(2)}`;
     };
 
+    // Vérifier si l'utilisateur a des tokens de ce contrat
+    let userBalance = 0n;
+    let hasTokens = false;
+    
+    try {
+      userBalance = await this.swapManager.getTokenBalance(tokenInfo.address);
+      hasTokens = userBalance > 0n;
+    } catch (error) {
+      console.log('Erreur récupération solde:', error.message);
+    }
+
     const message = `
 🪙 **Token:** ${tokenInfo.name}
 \`${tokenInfo.address}\`
@@ -339,6 +396,8 @@ ${tokenInfo.safetyCheck}
 💧 **Liquidity:** ${tokenInfo.liquidity.toFixed(4)} WETH
 📈 **Contract balance:** ${formatAddress(tokenInfo.address)} (<0.001%)
 
+${hasTokens ? `💰 **Votre solde:** ${ethers.formatUnits(userBalance, tokenInfo.decimals)} ${tokenInfo.symbol}` : ''}
+
 ${tokenInfo.safetyCheck.includes('Faible') ? '⚠️ **Ce token a une faible liquidité, vérifiez que le pool est correct avant de trader**' : ''}
 
 📋 **Tax:** B: ${tokenInfo.taxInfo.buy.toFixed(2)}% • S: ${tokenInfo.taxInfo.sell.toFixed(2)}% • T: ${tokenInfo.taxInfo.transfer.toFixed(2)}%
@@ -347,6 +406,7 @@ ${tokenInfo.safetyCheck.includes('Faible') ? '⚠️ **Ce token a une faible liq
 • Dexscreener • Dextools
     `;
 
+    // Créer le clavier avec les boutons d'achat
     const keyboard = {
       inline_keyboard: [
         [
@@ -356,12 +416,25 @@ ${tokenInfo.safetyCheck.includes('Faible') ? '⚠️ **Ce token a une faible liq
         [
           { text: '💰 Buy 0.5 ETH', callback_data: `buy_${tokenInfo.address}_0.5` },
           { text: '💰 Buy X ETH', callback_data: `buy_custom_${tokenInfo.address}` }
-        ],
-        [
-          { text: '⚡ Slippage: Unlimited', callback_data: `slippage_${tokenInfo.address}` }
         ]
       ]
     };
+
+    // Ajouter les boutons de vente si l'utilisateur a des tokens
+    if (hasTokens) {
+      keyboard.inline_keyboard.push([
+        { text: '💰 Sell 10%', callback_data: `sell_${tokenInfo.address}_10` },
+        { text: '💰 Sell 25%', callback_data: `sell_${tokenInfo.address}_25` }
+      ]);
+      keyboard.inline_keyboard.push([
+        { text: '💰 Sell 50%', callback_data: `sell_${tokenInfo.address}_50` },
+        { text: '💰 Sell 100%', callback_data: `sell_${tokenInfo.address}_100` }
+      ]);
+    }
+
+    keyboard.inline_keyboard.push([
+      { text: '⚡ Slippage: Unlimited', callback_data: `slippage_${tokenInfo.address}` }
+    ]);
 
     await this.bot.editMessageText(message, {
       chat_id: chatId,
@@ -404,6 +477,18 @@ ${tokenInfo.safetyCheck.includes('Faible') ? '⚠️ **Ce token a une faible liq
         
       } else if (data.startsWith('slippage_')) {
         await this.bot.answerCallbackQuery(callbackQuery.id, { text: '⚡ Slippage illimité activé' });
+      } else if (data.startsWith('sell_')) {
+        // Boutons de vente
+        const parts = data.split('_');
+        const tokenAddress = parts[1];
+        const percentage = parts[2];
+        
+        // Exécuter la vente
+        await this.executeSell(chatId, callbackQuery.id, tokenAddress, percentage);
+      } else if (data.startsWith('close_')) {
+        // Bouton de fermeture
+        const tokenAddress = data.replace('close_', '');
+        await this.bot.answerCallbackQuery(callbackQuery.id, { text: '❌ Fermeture' });
       }
     } catch (error) {
       console.error('Erreur callback:', error);
@@ -448,7 +533,7 @@ ${tokenInfo.safetyCheck.includes('Faible') ? '⚠️ **Ce token a une faible liq
         slippagePercentage: '0.02'
       });
 
-      // Message de succès
+      // Message de succès avec interface de vente
       const successMessage = `
 ✅ **Achat réussi !**
 
@@ -459,12 +544,31 @@ ${tokenInfo.safetyCheck.includes('Faible') ? '⚠️ **Ce token a une faible liq
 ⛽ **Gas:** ${result.gasUsed}
 
 🎉 **Félicitations pour votre achat !**
+📊 **Voulez-vous vendre une partie de vos tokens ?**
       `;
+
+      // Interface de vente avec 4 boutons
+      const sellKeyboard = {
+        inline_keyboard: [
+          [
+            { text: '💰 Sell 10%', callback_data: `sell_${tokenAddress}_10` },
+            { text: '💰 Sell 25%', callback_data: `sell_${tokenAddress}_25` }
+          ],
+          [
+            { text: '💰 Sell 50%', callback_data: `sell_${tokenAddress}_50` },
+            { text: '💰 Sell 100%', callback_data: `sell_${tokenAddress}_100` }
+          ],
+          [
+            { text: '❌ Fermer', callback_data: `close_${tokenAddress}` }
+          ]
+        ]
+      };
 
       await this.bot.editMessageText(successMessage, {
         chat_id: chatId,
         message_id: loadingMsg.message_id,
-        parse_mode: 'Markdown'
+        parse_mode: 'Markdown',
+        reply_markup: sellKeyboard
       });
 
     } catch (error) {
@@ -479,6 +583,108 @@ ${tokenInfo.safetyCheck.includes('Faible') ? '⚠️ **Ce token a une faible liq
 • Vérifiez que vous avez assez d'ETH
 • Vérifiez la liquidité du token
 • Réessayez avec un montant plus petit
+      `;
+
+      await this.bot.sendMessage(chatId, errorMessage, { parse_mode: 'Markdown' });
+    }
+  }
+
+  // Exécuter une vente
+  async executeSell(chatId, callbackQueryId, tokenAddress, percentage) {
+    try {
+      if (callbackQueryId) {
+        await this.bot.answerCallbackQuery(callbackQueryId, { text: `🚀 Vente de ${percentage}% en cours...` });
+      }
+      
+      const loadingMsg = await this.bot.sendMessage(chatId, `⏳ Vente de ${percentage}% du token en cours...\n\n⚡ Préparation de la transaction...`);
+
+      // Récupérer le solde du token
+      const tokenBalance = await this.swapManager.getTokenBalance(tokenAddress);
+      
+      if (tokenBalance === 0n) {
+        throw new Error('Aucun token à vendre');
+      }
+
+      // Calculer le montant à vendre
+      const sellAmount = (tokenBalance * BigInt(percentage)) / 100n;
+      
+      if (sellAmount === 0n) {
+        throw new Error('Montant à vendre trop petit');
+      }
+
+      // Récupérer les informations du token pour l'affichage
+      let tokenInfo = { symbol: 'TOKEN', decimals: 18 };
+      try {
+        tokenInfo = await this.getTokenInfo(tokenAddress);
+      } catch (error) {
+        console.log('Erreur récupération infos token:', error.message);
+      }
+
+      const sellAmountFormatted = ethers.formatUnits(sellAmount, tokenInfo.decimals);
+      const balanceFormatted = ethers.formatUnits(tokenBalance, tokenInfo.decimals);
+
+      // Mettre à jour le message de chargement
+      await this.bot.editMessageText(
+        `⏳ Vente de ${percentage}% du token en cours...\n\n💰 **À vendre:** ${sellAmountFormatted} ${tokenInfo.symbol}\n💼 **Solde total:** ${balanceFormatted} ${tokenInfo.symbol}\n\n🔍 Obtention du meilleur prix...`,
+        { chat_id: chatId, message_id: loadingMsg.message_id, parse_mode: 'Markdown' }
+      );
+
+      // Exécuter le swap de vente
+      const result = await this.swapManager.executeSwap({
+        sellToken: tokenAddress,
+        buyToken: CONFIG.TOKENS.ETH,
+        sellAmount: sellAmount.toString(),
+        slippagePercentage: '0.02'
+      });
+
+      // Calculer l'ETH reçu
+      let ethReceived = 'N/A';
+      try {
+        if (result.buyAmount) {
+          ethReceived = ethers.formatEther(result.buyAmount);
+        }
+      } catch (error) {
+        console.log('Erreur calcul ETH reçu:', error.message);
+      }
+
+      // Récupérer le nouveau solde
+      const newBalance = await this.swapManager.getTokenBalance(tokenAddress);
+      const newBalanceFormatted = ethers.formatUnits(newBalance, tokenInfo.decimals);
+
+      // Message de succès
+      const successMessage = `
+✅ **Vente réussie !**
+
+💰 **Vendu:** ${percentage}% (${sellAmountFormatted} ${tokenInfo.symbol})
+💎 **ETH reçu:** ${ethReceived} ETH
+💼 **Solde restant:** ${newBalanceFormatted} ${tokenInfo.symbol}
+
+🔗 **Transaction:** [Voir sur BaseScan](https://basescan.org/tx/${result.transactionHash})
+⏱️ **Temps:** ${result.performance?.total || 'N/A'}ms
+🏗️ **Bloc:** ${result.blockNumber}
+⛽ **Gas:** ${result.gasUsed}
+
+🎉 **Vente effectuée avec succès !**
+      `;
+
+      await this.bot.editMessageText(successMessage, {
+        chat_id: chatId,
+        message_id: loadingMsg.message_id,
+        parse_mode: 'Markdown'
+      });
+
+    } catch (error) {
+      console.error('Erreur lors de la vente:', error);
+      
+      const errorMessage = `
+❌ **Erreur lors de la vente**
+
+**Erreur:** ${error.message.replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&')}
+
+💡 **Suggestions:**
+• Vérifiez que vous avez des tokens à vendre
+• Vérifiez la liquidité du token
+• Réessayez avec un pourcentage plus petit
       `;
 
       await this.bot.sendMessage(chatId, errorMessage, { parse_mode: 'Markdown' });
