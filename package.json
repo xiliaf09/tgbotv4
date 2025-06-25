@@ -1,0 +1,34 @@
+{
+  "name": "0x-swap-api",
+  "version": "1.0.0",
+  "description": "Bot Telegram pour effectuer des swaps avec l'API 0x - Optimisé pour Railway",
+  "main": "src/startBot.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/startBot.js",
+    "dev": "node --watch src/startBot.js",
+    "local": "node examples/telegram-bot-start.js",
+    "example": "node examples/swap-example.js"
+  },
+  "dependencies": {
+    "ethers": "^6.10.0",
+    "node-fetch": "^3.3.2",
+    "node-telegram-bot-api": "^0.66.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "dotenv": "^16.3.1"
+  },
+  "keywords": [
+    "0x",
+    "swap",
+    "defi",
+    "ethereum",
+    "api",
+    "telegram",
+    "bot",
+    "railway"
+  ],
+  "author": "",
+  "license": "MIT"
+}
